@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "790074969221",
+    "project_id": "zyra-app-ce6a1",
+    "storage_bucket": "zyra-app-ce6a1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:790074969221:android:d8adae35f1853f1c132dec",
+        "android_client_info": {
+          "package_name": "com.example.zyra_final"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBifx3kPHS_F5mXAnqBJAuYChrcoG4xgw4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
