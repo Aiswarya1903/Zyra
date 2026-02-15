@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:zyra_final/domain/constant/appcolors.dart';
 import 'package:zyra_final/repository/screens/onboarding/height_screen.dart';
-import 'package:zyra_final/repository/screens/onboarding/onboarding_top_bar.dart';
+import 'package:zyra_final/domain/models/user_data.dart';
+
 
 
 class WeightScreen extends StatefulWidget {
@@ -31,7 +32,7 @@ class _WeightScreenState extends State<WeightScreen> {
         child: Column(
           children: [
            
-            const OnboardingTopBar(currentStep: 2),
+            //const OnboardingTopBar(currentStep: 2),
 
             const SizedBox(height: 60),
 
@@ -220,17 +221,20 @@ class _WeightScreenState extends State<WeightScreen> {
                         elevation: 4,
                       ),
                       onPressed: () {
-                        double finalWeight =
-                            selectedKg + (selectedDecimal / 10);
+                      double finalWeight =
+                      selectedKg + (selectedDecimal / 10);
 
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                HeightScreen(weight: finalWeight),
-                          ),
-                        );
+                      // Save globally
+                      UserData.weight = finalWeight;
+
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const HeightScreen(),
+                        ),
+                      );
                       },
+
                       child: const Text(
                         "Next",
                         style: TextStyle(

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:zyra_final/domain/constant/appcolors.dart';
 import 'package:zyra_final/repository/screens/periods/periodsdate.dart';
+import 'package:zyra_final/domain/models/user_data.dart';
+
 
 class RegularScreen extends StatefulWidget {
   const RegularScreen({super.key});
@@ -80,14 +82,15 @@ class _RegularScreenState extends State<RegularScreen> {
   }
 
   void onSave() {
+
+    
     if (selectedOption == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please select an option")),
       );
       return;
     }
-
-    print("Cycle Regular: $selectedOption");
+    UserData.cycleRegularity=selectedOption;
 
     Navigator.push(
       context,

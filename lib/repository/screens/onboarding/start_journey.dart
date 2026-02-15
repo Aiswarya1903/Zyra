@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:zyra_final/domain/constant/appcolors.dart';
+import 'package:zyra_final/domain/services/user_services.dart';
 import 'package:zyra_final/repository/screens/periods/regular.dart';
 
 class StartJourney extends StatelessWidget {
@@ -89,7 +90,9 @@ class KnowYourBodyBetter extends StatelessWidget {
                       ),
                       elevation: 3,
                     ),
-                    onPressed: () {
+                    onPressed: () async {
+                      await UserService.updateStep(1);
+
                       Navigator.push(
                         context,
                         MaterialPageRoute(

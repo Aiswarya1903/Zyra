@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:zyra_final/domain/constant/appcolors.dart';
+import 'package:zyra_final/domain/models/user_data.dart';
 
 class CycleSymptomsScreen extends StatefulWidget {
   const CycleSymptomsScreen({super.key});
@@ -115,7 +116,7 @@ class _CycleSymptomsScreenState extends State<CycleSymptomsScreen> {
       return;
     }
 
-    print("Selected symptoms: $selectedSymptoms");
+    UserData.symptoms = selectedSymptoms.toList();
 
     // Navigate next
     // Navigator.push(context, MaterialPageRoute(builder: (_) => NextScreen()));

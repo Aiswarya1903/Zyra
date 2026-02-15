@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:zyra_final/domain/constant/appcolors.dart';
-import 'package:zyra_final/repository/screens/onboarding/onboarding_top_bar.dart';
+import 'package:zyra_final/domain/models/user_data.dart';
 import 'package:zyra_final/repository/screens/onboarding/start_journey.dart';
 
 
@@ -34,11 +34,6 @@ class _AgeScreenState extends State<AgeScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            /// Back Button
-            
-             const OnboardingTopBar(currentStep: 4),
-
-
             const SizedBox(height: 10),
 
             /// Title
@@ -176,13 +171,20 @@ class _AgeScreenState extends State<AgeScreen> {
                     elevation: 4,
                   ),
                   onPressed: () {
+
+                    UserData.birthYear=selectedYear;
+                    int currentYear=DateTime.now().year;
+                    int age=currentYear-selectedYear;
+                    UserData.age=age;
+                    UserData.birthYear=selectedYear;
+                    
                     Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (context) => const StartJourney(),
                           ),
                         );
-                    print("Selected Year: $selectedYear");
+                    
 
                   },
                   child: const Text(

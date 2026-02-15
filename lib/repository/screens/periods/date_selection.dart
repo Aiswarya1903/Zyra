@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:zyra_final/repository/screens/workout/level.dart';
+import 'package:zyra_final/domain/models/user_data.dart';
+
 
 class SelectPeriodCalendar extends StatefulWidget {
   const SelectPeriodCalendar({super.key});
@@ -162,7 +164,8 @@ class _SelectPeriodCalendarState extends State<SelectPeriodCalendar> {
   List<DateTime> periodDates = selectedDays.toList();
   periodDates.sort();
 
-  print("Selected dates: $periodDates");
+  // Save globally
+  UserData.periodDates = periodDates;
 
   // Navigate to Workout Level screen
   Navigator.push(
