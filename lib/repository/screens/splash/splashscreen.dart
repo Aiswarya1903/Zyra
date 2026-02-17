@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:zyra_final/domain/constant/appcolors.dart';
-import 'package:zyra_final/repository/screens/login/loginScreen.dart';
 import 'package:zyra_final/repository/widgets/uihelper';
+import 'package:zyra_final/repository/screens/auth/auth_gate.dart';
+
 
 class Splashscreen extends StatefulWidget {
   const Splashscreen({super.key});
@@ -22,10 +23,9 @@ class _SplashscreenState extends State<Splashscreen> {
       if (mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (context) => const Loginscreen(),
-          ),
+          MaterialPageRoute(builder: (_) => const AuthGate()),
         );
+
       }
     });
   }

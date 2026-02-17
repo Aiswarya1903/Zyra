@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:zyra_final/domain/constant/appcolors.dart';
-import 'package:zyra_final/repository/screens/periods/symptoms.dart';
+import 'package:zyra_final/domain/models/user_data.dart';
+import 'package:zyra_final/repository/screens/diet/diet_impact.dart';
+
 
 class SleepImpactScreen extends StatefulWidget {
   const SleepImpactScreen({super.key});
@@ -86,12 +88,11 @@ class _SleepImpactScreenState extends State<SleepImpactScreen> {
       );
       return;
     }
-
-    print("Sleep Impact: $selectedOption");
+     UserData.sleepImpact = selectedOption!;
 
     Navigator.push(
       context, MaterialPageRoute(
-        builder: (context)=>CycleSymptomsScreen(),
+        builder: (context)=>DietImpactScreen(),
         ),
       );
   }

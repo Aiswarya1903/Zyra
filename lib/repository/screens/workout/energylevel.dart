@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:zyra_final/domain/constant/appcolors.dart';
+import 'package:zyra_final/domain/models/user_data.dart';
 import 'package:zyra_final/repository/screens/sleep/sleep.dart';
 
 class EnergyImpactScreen extends StatefulWidget {
@@ -87,8 +88,9 @@ class _EnergyImpactScreenState extends State<EnergyImpactScreen> {
       return;
     }
 
-    print("Energy Impact: $selectedOption");
-
+    
+    UserData.energyImpact=selectedOption;
+    
     Navigator.push(context,
     MaterialPageRoute(
       builder: (context)=>SleepImpactScreen(),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:zyra_final/domain/constant/appcolors.dart';
+import 'package:zyra_final/domain/models/user_data.dart';
+import 'package:zyra_final/repository/screens/diet/diet_preference.dart';
 
 class DietImpactScreen extends StatefulWidget {
   const DietImpactScreen({super.key});
@@ -86,11 +88,13 @@ class _DietImpactScreenState extends State<DietImpactScreen> {
       return;
     }
 
-    print("Diet Impact: $selectedOption");
+    UserData.dietImpact=selectedOption;
 
-    // Navigate to next screen
-    // Example:
-    // Navigator.push(context, MaterialPageRoute(builder: (_) => NextScreen()));
+    Navigator.push(context,
+     MaterialPageRoute(builder:
+      (context)=>DietPreferenceScreen(),
+      ),
+    );
   }
 
   @override

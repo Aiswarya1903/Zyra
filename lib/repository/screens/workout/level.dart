@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:zyra_final/domain/constant/appcolors.dart';
+import 'package:zyra_final/domain/models/user_data.dart';
 import 'package:zyra_final/repository/screens/workout/energylevel.dart';
 
 class ActivityLevelScreen extends StatefulWidget {
@@ -86,7 +87,7 @@ class _ActivityLevelScreenState extends State<ActivityLevelScreen> {
     }
 
     // Save this later to Firebase / local storage
-    print("Activity Level: $selectedLevel");
+    UserData.activityLevel=selectedLevel;
 
     Navigator.push(
       context,
@@ -118,7 +119,19 @@ class _ActivityLevelScreenState extends State<ActivityLevelScreen> {
                 ),
               ),
 
-              const SizedBox(height: 40),
+              const SizedBox(height: 8),
+
+              const Text(
+                "How physically active you are in your daily life and workouts.",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontFamily: 'Outfit',
+                  color: Colors.grey,
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
 
               optionCard("Beginner", "Beginner"),
               optionCard("Intermediate", "Intermediate"),

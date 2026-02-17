@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:zyra_final/domain/constant/appcolors.dart';
+import 'package:zyra_final/domain/models/user_data.dart';
+import 'package:zyra_final/repository/screens/periods/symptoms.dart';
 
 class DietPreferenceScreen extends StatefulWidget {
   const DietPreferenceScreen({super.key});
@@ -86,11 +88,12 @@ class _DietPreferenceScreenState extends State<DietPreferenceScreen> {
       return;
     }
 
-    print("Diet Preference: $selectedOption");
+    UserData.dietPreference=selectedOption;
 
-    // Navigate to next screen
-    // Example:
-    // Navigator.push(context, MaterialPageRoute(builder: (_) => NextScreen()));
+    Navigator.push(context, 
+    MaterialPageRoute(builder: 
+    (context)=>CycleSymptomsScreen(),),);
+    
   }
 
   @override

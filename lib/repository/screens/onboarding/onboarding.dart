@@ -1,6 +1,8 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:zyra_final/domain/constant/appcolors.dart';
 import 'package:zyra_final/domain/models/user_data.dart';
+import 'package:zyra_final/domain/services/auth_services.dart';
 import 'package:zyra_final/repository/screens/onboarding/weight_screen.dart';
 
 class Onboarding extends StatefulWidget {
@@ -39,21 +41,55 @@ class _OnboardingState extends State<Onboarding> {
     return RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email);
   }
 
-  void _onNext() {
-    if (!_formKey.currentState!.validate()) return;
+void _onNext() async {
+  if (!_formKey.currentState!.validate()) return;
 
-    // Save data globally
-    UserData.email = emailController.text.trim();
-    UserData.name = nameController.text.trim();
-    UserData.password = passwordController.text.trim();
+  UserData.email = emailController.text.trim();
+  UserData.name = nameController.text.trim();
+  UserData.password = passwordController.text.trim();
+
+  try {
+    await AuthService.signUp(
+      UserData.email,
+      UserData.password,
+    );
+
+    // Check login success
+    if (FirebaseAuth.instance.currentUser == null) {
+      throw Exception("Signup failed");
+    }
+
+    if (!mounted) return;
 
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const WeightScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const WeightScreen()),
+    );
+
+  } on FirebaseAuthException catch (e) {
+    String message = "Signup failed";
+
+    if (e.code == 'email-already-in-use') {
+      message = "Email already registered. Please login";
+    } else if (e.code == 'weak-password') {
+      message = "Password is too weak";
+    } else if (e.code == 'invalid-email') {
+      message = "Invalid email";
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Error: $e")),
     );
   }
+}
+
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -64,6 +100,7 @@ class _OnboardingState extends State<Onboarding> {
         child: Column(
           children: [
             /// Top Image
+            const SizedBox(height: 40),
             SizedBox(
               height: 260,
               width: double.infinity,

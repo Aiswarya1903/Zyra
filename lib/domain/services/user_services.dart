@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:zyra_final/domain/models/user_data.dart';
 
 class UserService {
   static final FirebaseFirestore _firestore =
@@ -7,33 +8,52 @@ class UserService {
 
   static final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Get current logged user id
-  static String getUserId() {
-    return _auth.currentUser!.uid;
-  }
+  /// Save all onboarding data at once
+  static Future<void> saveUserData() async {
+    try {
+      User? user = _auth.currentUser;
 
-  // Create user document (called after signup)
-  static Future<void> createUserDocument(
-      String name, String email) async {
-    String userId = _auth.currentUser!.uid;
+      if (user == null) {
+        throw Exception("User not logged in");
+      }
 
-    await _firestore.collection('users').doc(userId).set({
-      'name': name,
-      'email': email,
-      'createdAt': FieldValue.serverTimestamp(),
-      'onboardingStep': 0,
-    });
-  }
+      String uid = user.uid;
 
-  // Update onboarding step
-  static Future<void> updateStep(int step) async {
-    String userId = _auth.currentUser!.uid;
+      await _firestore.collection('users').doc(uid).set({
+        // Basic
+        'name': UserData.name,
+        'email': UserData.email,
 
-    await _firestore
-        .collection('users')
-        .doc(userId)
-        .set({
-      'onboardingStep': step,
-    }, SetOptions(merge: true));
+        // Body
+        'weight': UserData.weight,
+        'height': UserData.height,
+        'birthYear': UserData.birthYear,
+        'age': UserData.age,
+
+        // Cycle
+        'cycleRegularity': UserData.cycleRegularity,
+        'periodDates': UserData.periodDates
+            .map((e) => Timestamp.fromDate(e))
+            .toList(),
+
+        // Lifestyle
+        'activityLevel': UserData.activityLevel,
+        'energyImpact': UserData.energyImpact,
+        'sleepImpact': UserData.sleepImpact,
+        'dietImpact': UserData.dietImpact,
+        'dietPreference': UserData.dietPreference,
+
+        // Health
+        'symptoms': UserData.symptoms,
+
+        // Metadata
+        'createdAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true));
+
+      print("User data saved successfully");
+    } catch (e) {
+      print("Error saving user data: $e");
+    }
   }
 }

@@ -39,6 +39,16 @@ class _SelectPeriodCalendarState extends State<SelectPeriodCalendar> {
                   fit: BoxFit.contain,
                 ),
 
+                //text
+                const Text(
+                "Select all the days in each cycle",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontFamily: 'Outfit',
+                  color: Colors.grey,
+                ),
+              ),
+
                 // Calendar Container
                 Container(
                   width: MediaQuery.of(context).size.width * 0.9,
