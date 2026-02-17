@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:zyra_final/repository/screens/periods/date_selection.dart';
+import 'package:zyra_final/repository/screens/periods/edit_calendar.dart';
+import 'package:zyra_final/repository/screens/periods/onboarding_calendar.dart';
 import 'package:zyra_final/repository/screens/workout/level.dart';
 
 class Lastdate extends StatelessWidget {
@@ -63,7 +64,7 @@ class Lastdate extends StatelessWidget {
                         context,
                         MaterialPageRoute(
                           builder: (context) =>
-                              const SelectPeriodCalendar(),
+                              const OnboardingCalendar(),
                         ),
                       );
                     },
