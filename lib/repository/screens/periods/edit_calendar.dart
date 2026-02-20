@@ -2,9 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:zyra_final/domain/constant/appcolors.dart';
 
 class EditCalendar extends StatefulWidget {
   const EditCalendar({super.key});
@@ -27,7 +24,9 @@ class _EditCalendarState extends State<EditCalendar> {
     loadExistingDatesFromFirestore();
   }
 
-  /// Fetch existing period dates from Firestore
+  /// ================================
+  /// FIRESTORE LOAD
+  /// ================================
   Future<void> loadExistingDatesFromFirestore() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -40,9 +39,8 @@ class _EditCalendarState extends State<EditCalendar> {
     if (doc.exists && doc.data()!.containsKey('periodDates')) {
       List<dynamic> timestamps = doc['periodDates'];
 
-      selectedDays = timestamps
-          .map((t) => (t as Timestamp).toDate())
-          .toSet();
+      selectedDays =
+          timestamps.map((t) => (t as Timestamp).toDate()).toSet();
     }
 
     setState(() {
@@ -50,37 +48,157 @@ class _EditCalendarState extends State<EditCalendar> {
     });
   }
 
+  /// ================================
+  /// HELPERS
+  /// ================================
+
   bool isSelected(DateTime day) {
     return selectedDays.any((d) => isSameDay(d, day));
   }
 
+  /// Count selected days in same month
+  int getSelectedDaysInSameMonth(DateTime day) {
+    return selectedDays.where((d) =>
+        d.month == day.month && d.year == day.year).length;
+  }
+
+  /// Prevent future date selection
+  bool isFutureDate(DateTime day) {
+    DateTime today = DateTime.now();
+    DateTime onlyToday =
+        DateTime(today.year, today.month, today.day);
+    DateTime selected =
+        DateTime(day.year, day.month, day.day);
+
+    return selected.isAfter(onlyToday);
+  }
+
+  /// ================================
+  /// ALERTS (Zyra Theme)
+  /// ================================
+
+  void showFutureDateDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFFEDEFD3),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text(
+            "Invalid Selection",
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF3A4336),
+            ),
+          ),
+          content: const Text(
+            "You cannot add period dates for future days.\nSelect only past or today's dates.",
+            style: TextStyle(color: Color(0xFF3A4336)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                "OK",
+                style: TextStyle(color: Color(0xFF95A889)),
+              ),
+            )
+          ],
+        );
+      },
+    );
+  }
+
+  void showPeriodWarningDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFFEDEFD3),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text(
+            "Health Alert",
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF3A4336),
+            ),
+          ),
+          content: const Text(
+            "Periods usually last 2–7 days.\nHaving more than 8 days of bleeding is not considered normal.\n\nPlease consult a doctor.",
+            style: TextStyle(color: Color(0xFF3A4336)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                "OK",
+                style: TextStyle(color: Color(0xFF95A889)),
+              ),
+            )
+          ],
+        );
+      },
+    );
+  }
+
+  /// ================================
+  /// SAVE TO FIRESTORE
+  /// ================================
+  Future<void> saveDates() async {
+    if (selectedDays.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select at least one date")),
+      );
+      return;
+    }
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    List<Timestamp> firestoreDates =
+        selectedDays.map((d) => Timestamp.fromDate(d)).toList();
+
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .set({
+      'periodDates': firestoreDates,
+    }, SetOptions(merge: true));
+
+    Navigator.pop(context);
+  }
+
+  /// ================================
+  /// UI
+  /// ================================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBackground,
+      backgroundColor: const Color(0xFFEDEFD3),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : SafeArea(
               child: Center(
                 child: SingleChildScrollView(
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                    
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 20),
 
                       const Text(
                         "Edit your period days",
                         style: TextStyle(
                           fontSize: 16,
-                          fontFamily: 'Outfit',
                           color: Colors.grey,
                         ),
                       ),
 
                       const SizedBox(height: 20),
 
-                      // Calendar Container
+                      /// Calendar
                       Container(
                         width: MediaQuery.of(context).size.width * 0.9,
                         padding: const EdgeInsets.all(12),
@@ -90,23 +208,34 @@ class _EditCalendarState extends State<EditCalendar> {
                         ),
                         child: TableCalendar(
                           firstDay: DateTime(2020),
-                          lastDay: DateTime(2035),
+                          lastDay: DateTime.now(), // 🚫 no future months
                           focusedDay: _focusedDay,
-                          rangeSelectionMode:
-                              RangeSelectionMode.disabled,
 
-                          selectedDayPredicate: (day) {
-                            return isSelected(day);
-                          },
+                          selectedDayPredicate: (day) =>
+                              isSelected(day),
 
                           onDaySelected: (selectedDay, focusedDay) {
                             setState(() {
+                              // Block future date
+                              if (isFutureDate(selectedDay)) {
+                                showFutureDateDialog();
+                                return;
+                              }
+
                               if (isSelected(selectedDay)) {
                                 selectedDays.removeWhere(
                                     (d) => isSameDay(d, selectedDay));
                               } else {
-                                selectedDays.add(selectedDay);
+                                int count =
+                                    getSelectedDaysInSameMonth(selectedDay);
+
+                                if (count < 8) {
+                                  selectedDays.add(selectedDay);
+                                } else {
+                                  showPeriodWarningDialog();
+                                }
                               }
+
                               _focusedDay = focusedDay;
                             });
                           },
@@ -114,25 +243,6 @@ class _EditCalendarState extends State<EditCalendar> {
                           headerStyle: const HeaderStyle(
                             titleCentered: true,
                             formatButtonVisible: false,
-                            titleTextStyle: TextStyle(
-                              fontFamily: 'Outfit',
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                          ),
-
-                          daysOfWeekStyle: const DaysOfWeekStyle(
-                            weekdayStyle: TextStyle(
-                              fontFamily: 'Outfit',
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black54,
-                            ),
-                            weekendStyle: TextStyle(
-                              fontFamily: 'Outfit',
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black54,
-                            ),
                           ),
 
                           calendarStyle: const CalendarStyle(
@@ -144,18 +254,13 @@ class _EditCalendarState extends State<EditCalendar> {
                               color: Color(0xFF95A889),
                               shape: BoxShape.circle,
                             ),
-                            todayTextStyle: TextStyle(
-                              color: Colors.black,
-                              fontWeight: FontWeight.w600,
-                              fontFamily: 'Outfit',
-                            ),
                           ),
                         ),
                       ),
 
                       const SizedBox(height: 30),
 
-                      // Save Button
+                      /// Save Button
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF95A889),
@@ -170,44 +275,17 @@ class _EditCalendarState extends State<EditCalendar> {
                           "Save",
                           style: TextStyle(
                             fontSize: 18,
-                            fontFamily: 'Outfit',
                             color: Colors.black,
                           ),
                         ),
                       ),
 
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 30),
                     ],
                   ),
                 ),
               ),
             ),
     );
-  }
-
-  /// Save updated dates to Firestore
-  Future<void> saveDates() async {
-    if (selectedDays.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text("Please select at least one date")),
-      );
-      return;
-    }
-
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    List<Timestamp> firestoreDates =
-        selectedDays.map((d) => Timestamp.fromDate(d)).toList();
-
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .update({
-      'periodDates': firestoreDates,
-    });
-
-    Navigator.pop(context);
   }
 }
