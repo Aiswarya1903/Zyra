@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import 'package:zyra_final/domain/constant/appcolors.dart';
 import 'package:zyra_final/domain/models/user_data.dart';
 import 'package:zyra_final/domain/services/user_services.dart';
@@ -25,7 +28,6 @@ class _CycleSymptomsScreenState extends State<CycleSymptomsScreen> {
 
   Set<String> selectedSymptoms = {};
 
-  // Toggle logic (same as before)
   void toggleSelection(String symptom) {
     setState(() {
       if (symptom == "None") {
@@ -33,7 +35,6 @@ class _CycleSymptomsScreenState extends State<CycleSymptomsScreen> {
         selectedSymptoms.add("None");
       } else {
         selectedSymptoms.remove("None");
-
         if (selectedSymptoms.contains(symptom)) {
           selectedSymptoms.remove(symptom);
         } else {
@@ -42,9 +43,7 @@ class _CycleSymptomsScreenState extends State<CycleSymptomsScreen> {
       }
     });
   }
-
-  // Save without breaking your existing flow
-  Future<void> onSave() async {
+Future<void> onSave() async {
     if (selectedSymptoms.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Select at least one option")),
@@ -52,33 +51,42 @@ class _CycleSymptomsScreenState extends State<CycleSymptomsScreen> {
       return;
     }
 
-    // Save into UserData (same architecture)
-    UserData.symptoms = selectedSymptoms.toList();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
     try {
-      // Save all onboarding data to Firestore
+      String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+      // 1. Save all onboarding data (name, age, cycle info, etc.) to Firestore
+      UserData.symptoms = selectedSymptoms.toList();
       await UserService.saveUserData();
+
+      // 2. Also save symptoms as lifestyle data into dailyWellness subcollection
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('dailyWellness')
+          .doc(today)
+          .set({
+            'symptoms': selectedSymptoms.toList(),
+            'date': Timestamp.now(),
+          }, SetOptions(merge: true));
 
       if (!mounted) return;
 
-      // Go to Home
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(
-          builder: (context) => const ZyraHomePage(),
-        ),
+        MaterialPageRoute(builder: (context) => const ZyraHomePage()),
         (route) => false,
       );
     } catch (e) {
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error: $e")),
       );
     }
   }
 
-  // Symptom chip
   Widget symptomChip(String symptom) {
     bool isSelected = selectedSymptoms.contains(symptom);
 
@@ -87,9 +95,7 @@ class _CycleSymptomsScreenState extends State<CycleSymptomsScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.buttonColor
-              : AppColors.scaffoldBackground,
+          color: isSelected ? AppColors.buttonColor : AppColors.scaffoldBackground,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: AppColors.buttonColor),
         ),
@@ -114,11 +120,7 @@ class _CycleSymptomsScreenState extends State<CycleSymptomsScreen> {
           children: [
             const SizedBox(height: 20),
 
-            // Illustration
-            Image.asset(
-              "assets/images/symptom.png",
-              height: 160,
-            ),
+            Image.asset("assets/images/symptom.png", height: 160),
 
             const SizedBox(height: 10),
 
@@ -146,7 +148,6 @@ class _CycleSymptomsScreenState extends State<CycleSymptomsScreen> {
 
             const SizedBox(height: 20),
 
-            // Circular container (new UI)
             Expanded(
               child: Center(
                 child: Container(
@@ -163,8 +164,7 @@ class _CycleSymptomsScreenState extends State<CycleSymptomsScreen> {
                       runAlignment: WrapAlignment.center,
                       spacing: 10,
                       runSpacing: 10,
-                      children:
-                          symptoms.map((s) => symptomChip(s)).toList(),
+                      children: symptoms.map((s) => symptomChip(s)).toList(),
                     ),
                   ),
                 ),
@@ -173,7 +173,6 @@ class _CycleSymptomsScreenState extends State<CycleSymptomsScreen> {
 
             const SizedBox(height: 10),
 
-            // Finish button
             SizedBox(
               width: 260,
               height: 55,

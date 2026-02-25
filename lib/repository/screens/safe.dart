@@ -1,3 +1,4 @@
+//homescreen
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -18,7 +19,8 @@ class ZyraHomePage extends StatefulWidget {
   State<ZyraHomePage> createState() => _ZyraHomePageState();
 }
 
-class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver {
+class _ZyraHomePageState extends State<ZyraHomePage>
+    with WidgetsBindingObserver {
   String userName = "";
   int selectedIndex = 0;
   List<DateTime> periodDates = [];
@@ -53,7 +55,9 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     final doc = await FirebaseFirestore.instance
-        .collection('users').doc(user.uid).get();
+        .collection('users')
+        .doc(user.uid)
+        .get();
     if (doc.exists && doc.data()!.containsKey('periodDates')) {
       List<dynamic> timestamps = doc['periodDates'];
       periodDates = timestamps.map((t) => (t as Timestamp).toDate()).toList();
@@ -61,21 +65,17 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
       cycleDay = getCycleDay(periodDates, cycleLength);
       currentPhase = getCurrentPhaseFromDay(cycleDay);
       phaseProgress = cycleDay / cycleLength;
-
-      // Save phase + cycleDay so all screens can read directly from Firestore
-      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .update({
-        'currentPhase': currentPhase,
-        'cycleDay': cycleDay,
-        'cycleLength': cycleLength,
-        'phaseUpdatedOn': today,
-      });
-
       if (mounted) setState(() {});
     }
+
+    // Save phase + cycleDay so all screens can read directly from Firestore
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+      'currentPhase': currentPhase,
+      'cycleDay': cycleDay, 
+      'cycleLength': cycleLength, 
+      'phaseUpdatedOn': today, 
+    });
   }
 
   void _showWaterCompletedPopup() {
@@ -92,14 +92,21 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text("🎉 Task Completed!",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const Text(
+                "🎉 Task Completed!",
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 10),
-              const Text("You reached your daily water goal 💧",
-                  textAlign: TextAlign.center, style: TextStyle(fontSize: 14)),
+              const Text(
+                "You reached your daily water goal 💧",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14),
+              ),
               const SizedBox(height: 20),
               ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF95A889)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF95A889),
+                ),
                 onPressed: () => Navigator.pop(context),
                 child: const Text("Great!"),
               ),
@@ -114,46 +121,37 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    // sleep has its own save path in SleepPage — don't overwrite it here
     await FirebaseFirestore.instance
-        .collection('users').doc(user.uid)
-        .collection('dailyWellness').doc(today)
+        .collection('users')
+        .doc(user.uid)
+        .collection('dailyWellness')
+        .doc(today)
         .set({
-      'mood': moodScore,
-      'water': waterGlasses,
-      'symptoms': todaySymptoms,
-      'date': Timestamp.now(),
-    }, SetOptions(merge: true));
+          'mood': moodScore,
+          'water': waterGlasses,
+          //'sleep': sleepHours,
+          'symptoms': todaySymptoms,
+          'date': Timestamp.now(),
+        }, SetOptions(merge: true));
   }
 
   Future<void> _refreshWellnessData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-    final String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final ref = FirebaseFirestore.instance
-        .collection('users').doc(user.uid)
-        .collection('dailyWellness').doc(today);
-
-    DocumentSnapshot doc;
-    try {
-      doc = await ref.get(const GetOptions(source: Source.server));
-    } catch (_) {
-      try {
-        doc = await ref.get(const GetOptions(source: Source.cache));
-      } catch (_) {
-        return;
-      }
-    }
-
+    String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('dailyWellness')
+        .doc(today)
+        .get();
     if (!mounted) return;
     if (doc.exists) {
-      // Use data() map so missing fields return null instead of throwing
-      final data = doc.data() as Map<String, dynamic>? ?? {};
       setState(() {
-        moodScore     = (data['mood']     as num?)?.toInt()    ?? moodScore;
-        waterGlasses  = (data['water']    as num?)?.toInt()    ?? waterGlasses;
-        sleepHours    = (data['sleep']    as num?)?.toDouble() ?? sleepHours;
-        todaySymptoms = List<String>.from(data['symptoms']     ?? todaySymptoms);
+        moodScore = doc['mood'] ?? 3;
+        waterGlasses = doc['water'] ?? 0;
+        sleepHours = (doc['sleep'] as num?)?.toDouble() ?? 0;
+        todaySymptoms = List<String>.from(doc['symptoms'] ?? []);
       });
     }
   }
@@ -178,14 +176,17 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
             child: Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                  color: const Color(0xFFEDEFD3),
-                  borderRadius: BorderRadius.circular(20)),
+                color: const Color(0xFFEDEFD3),
+                borderRadius: BorderRadius.circular(20),
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text("How is your mood today?",
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center),
+                  const Text(
+                    "How is your mood today?",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 20),
                   Wrap(
                     alignment: WrapAlignment.center,
@@ -201,11 +202,15 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: selected ? const Color(0xFF9E4B6E) : Colors.white,
+                            color: selected
+                                ? const Color(0xFF9E4B6E)
+                                : Colors.white,
                             border: Border.all(color: const Color(0xFF95B289)),
                           ),
-                          child: Text(emojis[index],
-                              style: const TextStyle(fontSize: 28)),
+                          child: Text(
+                            emojis[index],
+                            style: const TextStyle(fontSize: 28),
+                          ),
                         ),
                       );
                     }),
@@ -213,7 +218,8 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
                   const SizedBox(height: 20),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF95A889)),
+                      backgroundColor: const Color(0xFF95A889),
+                    ),
                     onPressed: () async {
                       moodScore = tempMood;
                       await saveDailyWellness();
@@ -233,23 +239,35 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
 
   String getMoodEmoji() {
     switch (moodScore) {
-      case 1: return "😞";
-      case 2: return "🙁";
-      case 3: return "😐";
-      case 4: return "🙂";
-      case 5: return "😄";
-      default: return "😐";
+      case 1:
+        return "😞";
+      case 2:
+        return "🙁";
+      case 3:
+        return "😐";
+      case 4:
+        return "🙂";
+      case 5:
+        return "😄";
+      default:
+        return "😐";
     }
   }
 
   String getMoodText() {
     switch (moodScore) {
-      case 1: return "Very Low";
-      case 2: return "Low";
-      case 3: return "Neutral";
-      case 4: return "Good";
-      case 5: return "Great";
-      default: return "Neutral";
+      case 1:
+        return "Very Low";
+      case 2:
+        return "Low";
+      case 3:
+        return "Neutral";
+      case 4:
+        return "Good";
+      case 5:
+        return "Great";
+      default:
+        return "Neutral";
     }
   }
 
@@ -277,13 +295,16 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
           builder: (context, setDialogState) => Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                color: const Color(0xFFEDEFD3)),
+              borderRadius: BorderRadius.circular(20),
+              color: const Color(0xFFEDEFD3),
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text("Water Tracker",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text(
+                  "Water Tracker",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 20),
                 GestureDetector(
                   onTap: () async {
@@ -292,10 +313,14 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
                       setState(() => waterGlasses = newCount);
                       final user = FirebaseAuth.instance.currentUser;
                       if (user != null) {
-                        String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+                        String today = DateFormat(
+                          'yyyy-MM-dd',
+                        ).format(DateTime.now());
                         await FirebaseFirestore.instance
-                            .collection('users').doc(user.uid)
-                            .collection('dailyWellness').doc(today)
+                            .collection('users')
+                            .doc(user.uid)
+                            .collection('dailyWellness')
+                            .doc(today)
                             .set({'water': newCount}, SetOptions(merge: true));
                       }
                     }
@@ -308,12 +333,15 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
                   child: const Text("🥛", style: TextStyle(fontSize: 70)),
                 ),
                 const SizedBox(height: 10),
-                Text("$waterGlasses glasses today",
-                    style: const TextStyle(fontSize: 16)),
+                Text(
+                  "$waterGlasses glasses today",
+                  style: const TextStyle(fontSize: 16),
+                ),
                 const SizedBox(height: 15),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF95A889)),
+                    backgroundColor: const Color(0xFF95A889),
+                  ),
                   onPressed: () => Navigator.pop(context),
                   child: const Text("Done"),
                 ),
@@ -358,28 +386,26 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
     wellnessSubscription?.cancel();
     String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     wellnessSubscription = FirebaseFirestore.instance
-        .collection('users').doc(user.uid)
-        .collection('dailyWellness').doc(today)
-        .snapshots(includeMetadataChanges: true)
+        .collection('users')
+        .doc(user.uid)
+        .collection('dailyWellness')
+        .doc(today)
+        .snapshots()
         .listen(
           (doc) {
             if (!mounted) return;
-            // Skip cache-only snapshots — only update UI from server data
-            // This prevents stale cache overwriting a fresh server read
-            if (doc.metadata.isFromCache) return;
             if (doc.exists) {
-              final data = doc.data() as Map<String, dynamic>? ?? {};
               setState(() {
-                moodScore     = (data['mood']     as num?)?.toInt()    ?? moodScore;
-                waterGlasses  = (data['water']    as num?)?.toInt()    ?? waterGlasses;
-                sleepHours    = (data['sleep']    as num?)?.toDouble() ?? sleepHours;
-                todaySymptoms = List<String>.from(data['symptoms']     ?? todaySymptoms);
+                moodScore = doc['mood'] ?? 3;
+                waterGlasses = doc['water'] ?? 0;
+                sleepHours = sleepHours = (doc['sleep'] as num?)?.toDouble() ?? 0;
+                todaySymptoms = List<String>.from(doc['symptoms'] ?? []);
               });
             } else {
               setState(() {
                 moodScore = 3;
                 waterGlasses = 0;
-                sleepHours = 0.0;
+                sleepHours = 0;
                 todaySymptoms = [];
               });
             }
@@ -412,7 +438,9 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       final doc = await FirebaseFirestore.instance
-          .collection('users').doc(user.uid).get();
+          .collection('users')
+          .doc(user.uid)
+          .get();
       if (doc.exists && mounted) {
         setState(() => userName = doc['name'] ?? "");
       }
@@ -443,7 +471,9 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
       default:
         return; // index 0 is home, no navigation needed
     }
-    Navigator.push(context, MaterialPageRoute(builder: (_) => screen)).then((_) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => screen)).then((
+      _,
+    ) {
       // Reset selected index back to home when returning
       if (mounted) setState(() => selectedIndex = 0);
     });
@@ -455,7 +485,10 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset("assets/images/background.png", fit: BoxFit.cover),
+            child: Image.asset(
+              "assets/images/background.png",
+              fit: BoxFit.cover,
+            ),
           ),
           SafeArea(
             child: SingleChildScrollView(
@@ -467,8 +500,10 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
                   const SizedBox(height: 20),
                   _phaseSection(),
                   const SizedBox(height: 20),
-                  const Text("Lifestyle",
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  const Text(
+                    "Lifestyle",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
                   const SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -483,26 +518,34 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
                       GestureDetector(
                         onTap: () async {
                           _checkDateAndReinitialize();
-                          await Navigator.push(context,
-                              MaterialPageRoute(builder: (_) => const SleepPage()));
-                          await _refreshWellnessData();
-                          await Future.delayed(const Duration(milliseconds: 800));
-                          listenTodayWellness();
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const SleepPage(),
+                            ),
+                          );
+                          
                         },
                         child: _lifestyleCard("assets/images/sleep.png"),
                       ),
                       GestureDetector(
                         onTap: () {
-                          Navigator.push(context,
-                              MaterialPageRoute(builder: (_) => const MeditationPage()));
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const MeditationPage(),
+                            ),
+                          );
                         },
                         child: _lifestyleCard("assets/images/meditation.png"),
                       ),
                     ],
                   ),
                   const SizedBox(height: 25),
-                  const Text("Discipline",
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  const Text(
+                    "Discipline",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
                   const SizedBox(height: 10),
                   _disciplineSection(),
                   const SizedBox(height: 40),
@@ -525,54 +568,81 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
               context: context,
               builder: (context) => AlertDialog(
                 backgroundColor: const Color.fromARGB(255, 237, 250, 209),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                title: const Text("Logout",
-                    style: TextStyle(color: Color(0xFF3A4336), fontWeight: FontWeight.bold)),
-                content: const Text("Do you want to Logout?",
-                    style: TextStyle(color: Color(0xFF3A4336))),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                title: const Text(
+                  "Logout",
+                  style: TextStyle(
+                    color: Color(0xFF3A4336),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                content: const Text(
+                  "Do you want to Logout?",
+                  style: TextStyle(color: Color(0xFF3A4336)),
+                ),
                 actions: [
                   TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text("Cancel")),
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text("Cancel"),
+                  ),
                   TextButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text("Logout")),
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text("Logout"),
+                  ),
                 ],
               ),
             );
             if (confirm == true) await FirebaseAuth.instance.signOut();
           },
           child: Container(
-            height: 64, width: 64,
+            height: 64,
+            width: 64,
             decoration: const BoxDecoration(
               shape: BoxShape.circle,
               image: DecorationImage(
-                  image: AssetImage("assets/images/profile.png"), fit: BoxFit.cover),
+                image: AssetImage("assets/images/profile.png"),
+                fit: BoxFit.cover,
+              ),
             ),
           ),
         ),
         const Spacer(),
         Column(
           children: [
-            Text(getDay(),
-                style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF3A4336))),
-            Text(getDate(), style: const TextStyle(fontSize: 13, color: Colors.black54)),
+            Text(
+              getDay(),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF3A4336),
+              ),
+            ),
+            Text(
+              getDate(),
+              style: const TextStyle(fontSize: 13, color: Colors.black54),
+            ),
           ],
         ),
         const Spacer(),
         GestureDetector(
           onTap: () async {
-            await Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const PeriodCalendarScreen()));
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const PeriodCalendarScreen()),
+            );
             fetchPeriodDates();
           },
           child: Container(
-            height: 58, width: 58,
+            height: 58,
+            width: 58,
             decoration: const BoxDecoration(
               shape: BoxShape.circle,
               image: DecorationImage(
-                  image: AssetImage("assets/images/calender.png"), fit: BoxFit.cover),
+                image: AssetImage("assets/images/calender.png"),
+                fit: BoxFit.cover,
+              ),
             ),
           ),
         ),
@@ -595,25 +665,36 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
               Text(
                 "${currentPhase.split(" ")[0]}\nPhase",
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               Stack(
                 alignment: Alignment.center,
                 children: [
                   SizedBox(
-                    height: 110, width: 110,
+                    height: 110,
+                    width: 110,
                     child: CircularProgressIndicator(
                       value: phaseProgress,
                       strokeWidth: 12,
                       backgroundColor: const Color(0xFF95B289).withOpacity(0.2),
-                      valueColor: const AlwaysStoppedAnimation(Color(0xFF95B289)),
+                      valueColor: const AlwaysStoppedAnimation(
+                        Color(0xFF95B289),
+                      ),
                     ),
                   ),
                   Column(
                     children: [
                       const Text("Period in"),
-                      Text("${getDaysUntilNextPeriod()}",
-                          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+                      Text(
+                        "${getDaysUntilNextPeriod()}",
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const Text("days"),
                     ],
                   ),
@@ -654,7 +735,10 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
       children: [
         Text(emoji, style: const TextStyle(fontSize: 18)),
         const SizedBox(height: 2),
-        Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+        Text(
+          text,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+        ),
       ],
     );
   }
@@ -664,7 +748,8 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
 
   Widget _lifestyleCard(String image) {
     return Container(
-      height: 100, width: 90,
+      height: 100,
+      width: 90,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFF95B289), width: 2),
@@ -682,9 +767,10 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
           child: GestureDetector(
             onTap: () {
               setState(() => selectedIndex = 1);
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const WorkoutScreen()))
-                  .then((_) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const WorkoutScreen()),
+              ).then((_) {
                 if (mounted) setState(() => selectedIndex = 0);
               });
             },
@@ -694,8 +780,9 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
                 borderRadius: BorderRadius.circular(25),
                 border: Border.all(color: const Color(0xFF95B289), width: 2),
                 image: const DecorationImage(
-                    image: AssetImage("assets/images/workout.png"),
-                    fit: BoxFit.cover),
+                  image: AssetImage("assets/images/workout.png"),
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
           ),
@@ -707,20 +794,24 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
               // Symptoms card
               GestureDetector(
                 onTap: () async {
-                  await Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const SymptomsScreen()));
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SymptomsScreen()),
+                  );
                   await _refreshWellnessData();
-                  await Future.delayed(const Duration(milliseconds: 800));
-                  listenTodayWellness();
                 },
                 child: Container(
                   height: 95,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFF95B289), width: 2),
+                    border: Border.all(
+                      color: const Color(0xFF95B289),
+                      width: 2,
+                    ),
                     image: const DecorationImage(
-                        image: AssetImage("assets/images/analytics.png"),
-                        fit: BoxFit.cover),
+                      image: AssetImage("assets/images/analytics.png"),
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
               ),
@@ -729,9 +820,10 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
               GestureDetector(
                 onTap: () {
                   setState(() => selectedIndex = 2);
-                  Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const DietScreen()))
-                      .then((_) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const DietScreen()),
+                  ).then((_) {
                     if (mounted) setState(() => selectedIndex = 0);
                   });
                 },
@@ -739,10 +831,14 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
                   height: 95,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFF95B289), width: 2),
+                    border: Border.all(
+                      color: const Color(0xFF95B289),
+                      width: 2,
+                    ),
                     image: const DecorationImage(
-                        image: AssetImage("assets/images/food.png"),
-                        fit: BoxFit.cover),
+                      image: AssetImage("assets/images/food.png"),
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
               ),
@@ -753,14 +849,14 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
     );
   }
 
-  // ── BOTTOM NAV BAR — fully working ────────────────────────────────────────
+  //bottom navbar
   Widget _bottomNavBar() {
     return Container(
       height: 70,
       decoration: BoxDecoration(
         color: const Color.fromARGB(255, 209, 231, 200),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 10)
+          BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 10),
         ],
       ),
       child: Row(
@@ -790,11 +886,13 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
                   ? const Color(0xFF95B289).withOpacity(0.2)
                   : Colors.transparent,
             ),
-            child: Image.asset(image,
-                height: 26,
-                width: 26,
-                fit: BoxFit.contain,
-                color: isSelected ? const Color(0xFF95B289) : Colors.grey),
+            child: Image.asset(
+              image,
+              height: 26,
+              width: 26,
+              fit: BoxFit.contain,
+              color: isSelected ? const Color(0xFF95B289) : Colors.grey,
+            ),
           ),
         ],
       ),

@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:zyra_final/domain/constant/appcolors.dart';
 import 'package:zyra_final/domain/models/user_data.dart';
@@ -78,24 +80,42 @@ class _ActivityLevelScreenState extends State<ActivityLevelScreen> {
     );
   }
 
-  void onSave() {
-    if (selectedLevel == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please select your activity level")),
-      );
-      return;
-    }
-
-    // Save this later to Firebase / local storage
-    UserData.activityLevel=selectedLevel;
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => EnergyImpactScreen(),
-      ),
+  void onSave() async {
+  if (selectedLevel == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Please select your activity level")),
     );
+    return;
   }
+
+  // Save locally (optional)
+  UserData.activityLevel = selectedLevel;
+
+  try {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final userRef =
+        FirebaseFirestore.instance.collection('users').doc(user.uid);
+
+    await userRef.set({
+      'baseWorkoutLevel': selectedLevel,
+      'workoutLevel': selectedLevel,   // initial current level
+      'workoutStreak': 0,
+      'lastWorkoutDate': null,
+    }, SetOptions(merge: true));
+
+  } catch (e) {
+    debugPrint("Error saving workout level: $e");
+  }
+
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => EnergyImpactScreen(),
+    ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {

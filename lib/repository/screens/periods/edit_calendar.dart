@@ -24,9 +24,6 @@ class _EditCalendarState extends State<EditCalendar> {
     loadExistingDatesFromFirestore();
   }
 
-  /// ================================
-  /// FIRESTORE LOAD
-  /// ================================
   Future<void> loadExistingDatesFromFirestore() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -48,9 +45,6 @@ class _EditCalendarState extends State<EditCalendar> {
     });
   }
 
-  /// ================================
-  /// HELPERS
-  /// ================================
 
   bool isSelected(DateTime day) {
     return selectedDays.any((d) => isSameDay(d, day));
@@ -73,9 +67,6 @@ class _EditCalendarState extends State<EditCalendar> {
     return selected.isAfter(onlyToday);
   }
 
-  /// ================================
-  /// ALERTS (Zyra Theme)
-  /// ================================
 
   void showFutureDateDialog() {
     showDialog(
@@ -145,9 +136,7 @@ class _EditCalendarState extends State<EditCalendar> {
     );
   }
 
-  /// ================================
-  /// SAVE TO FIRESTORE
-  /// ================================
+
   Future<void> saveDates() async {
     if (selectedDays.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -172,9 +161,6 @@ class _EditCalendarState extends State<EditCalendar> {
     Navigator.pop(context);
   }
 
-  /// ================================
-  /// UI
-  /// ================================
   @override
   Widget build(BuildContext context) {
     return Scaffold(

@@ -12,14 +12,54 @@ class SleepPage extends StatefulWidget {
 }
 
 class _SleepPageState extends State<SleepPage> {
-  // ✅ Tracks weekly data locally so graph updates instantly on save
   List<double> _weeklyData = List.filled(7, 0);
   bool _isLoading = true;
+
+  // Today's logged sleep — null means not logged yet
+  double? _todaySleep;
 
   @override
   void initState() {
     super.initState();
-    _loadWeeklyData();
+    _loadAllData();
+  }
+
+  // Load both weekly graph data AND today's sleep in one go
+  Future<void> _loadAllData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    // Run both fetches in parallel
+    final results = await Future.wait([
+      getWeeklyData(),
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('dailyWellness')
+          .doc(today)
+          .get(const GetOptions(source: Source.server))
+          .catchError((_) => FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .collection('dailyWellness')
+              .doc(today)
+              .get()),
+    ]);
+
+    if (!mounted) return;
+
+    final weekly = results[0] as List<double>;
+    final wellnessDoc = results[1] as DocumentSnapshot;
+    final data = wellnessDoc.data() as Map<String, dynamic>? ?? {};
+    final savedSleep = (data['sleep'] as num?)?.toDouble();
+
+    setState(() {
+      _weeklyData = weekly;
+      _todaySleep = savedSleep; // null if not logged today
+      _isLoading = false;
+    });
   }
 
   String getGreeting() {
@@ -35,22 +75,10 @@ class _SleepPageState extends State<SleepPage> {
     return "assets/images/night.jpg";
   }
 
-  // ✅ Load weekly data into state so we can update it instantly
-  Future<void> _loadWeeklyData() async {
-    final data = await getWeeklyData();
-    if (mounted) {
-      setState(() {
-        _weeklyData = data;
-        _isLoading = false;
-      });
-    }
-  }
-
   Future<void> saveTodaySleep(double hours) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-
-    String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
     try {
       await FirebaseFirestore.instance
@@ -58,7 +86,8 @@ class _SleepPageState extends State<SleepPage> {
           .doc(user.uid)
           .collection('dailyWellness')
           .doc(today)
-          .set({'sleep': hours, 'date': Timestamp.now()}, SetOptions(merge: true));
+          .set({'sleep': hours, 'date': Timestamp.now()},
+              SetOptions(merge: true));
 
       await FirebaseFirestore.instance
           .collection('users')
@@ -73,17 +102,18 @@ class _SleepPageState extends State<SleepPage> {
 
       await deleteOldSleepData();
 
-      // ✅ Update today's value in local weekly data instantly — no reload needed
       if (mounted) {
         setState(() {
-          _weeklyData[6] = hours; // index 6 = today (rightmost on graph)
+          _todaySleep = hours;
+          _weeklyData[6] = hours;
         });
       }
     } catch (e) {
-      debugPrint('❌ Sleep save failed: $e');
+      debugPrint('Sleep save failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Save failed: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Save failed: $e'),
+              backgroundColor: Colors.red),
         );
       }
     }
@@ -93,9 +123,7 @@ class _SleepPageState extends State<SleepPage> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     final collection = FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .collection('sleep_history');
+        .collection('users').doc(user.uid).collection('sleep_history');
     final snapshot = await collection.get();
     if (snapshot.docs.length <= 7) return;
     List<QueryDocumentSnapshot> docs = snapshot.docs;
@@ -106,9 +134,15 @@ class _SleepPageState extends State<SleepPage> {
     }
   }
 
-  // ✅ Themed popup matching your app's green/cream style
-  void showSleepDialog() {
-    TextEditingController controller = TextEditingController();
+  // Shows dialog — pre-fills current value if editing
+  void _showSleepDialog({bool isEditing = false}) {
+    final controller = TextEditingController(
+      text: isEditing && _todaySleep != null
+          ? (_todaySleep! % 1 == 0
+              ? _todaySleep!.toInt().toString()
+              : _todaySleep!.toString())
+          : '',
+    );
 
     showDialog(
       context: context,
@@ -118,32 +152,32 @@ class _SleepPageState extends State<SleepPage> {
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            color: const Color(0xFFEDEFD3), // ✅ cream background like other popups
+            color: const Color(0xFFEDEFD3),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header icon
-              const Text("😴", style: TextStyle(fontSize: 48)),
+              Text(isEditing ? "✏️" : "😴",
+                  style: const TextStyle(fontSize: 15)),
               const SizedBox(height: 12),
-
-              const Text(
-                "How many hours did\nyou sleep?",
+              Text(
+                isEditing
+                    ? "Edit today's sleep"
+                    : "How many hours did\nyou sleep?",
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: Color(0xFF3A4336),
                 ),
               ),
-
               const SizedBox(height: 20),
-
-              // ✅ Themed text field
               TextField(
                 controller: controller,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
                 textAlign: TextAlign.center,
+                autofocus: true,
                 style: const TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
@@ -152,15 +186,12 @@ class _SleepPageState extends State<SleepPage> {
                 decoration: InputDecoration(
                   hintText: "0",
                   hintStyle: TextStyle(
-                    fontSize: 32,
-                    color: Colors.grey.withOpacity(0.5),
-                  ),
+                      fontSize: 32, color: Colors.grey.withOpacity(0.5)),
                   suffixText: "hrs",
                   suffixStyle: const TextStyle(
-                    fontSize: 16,
-                    color: Color(0xFF95B289),
-                    fontWeight: FontWeight.w600,
-                  ),
+                      fontSize: 16,
+                      color: Color(0xFF95B289),
+                      fontWeight: FontWeight.w600),
                   filled: true,
                   fillColor: Colors.white.withOpacity(0.7),
                   border: OutlineInputBorder(
@@ -169,7 +200,8 @@ class _SleepPageState extends State<SleepPage> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(color: Color(0xFF95B289), width: 2),
+                    borderSide: const BorderSide(
+                        color: Color(0xFF95B289), width: 2),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
@@ -177,16 +209,10 @@ class _SleepPageState extends State<SleepPage> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 8),
-              const Text(
-                "e.g. 7 or 7.5",
-                style: TextStyle(fontSize: 12, color: Colors.black45),
-              ),
-
+              const Text("e.g. 7 or 7.5",
+                  style: TextStyle(fontSize: 12, color: Colors.black45)),
               const SizedBox(height: 20),
-
-              // ✅ Themed buttons row
               Row(
                 children: [
                   Expanded(
@@ -199,10 +225,8 @@ class _SleepPageState extends State<SleepPage> {
                         ),
                       ),
                       onPressed: () => Navigator.pop(context),
-                      child: const Text(
-                        "Cancel",
-                        style: TextStyle(color: Color(0xFF3A4336)),
-                      ),
+                      child: const Text("Cancel",
+                          style: TextStyle(color: Color(0xFF3A4336))),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -212,30 +236,31 @@ class _SleepPageState extends State<SleepPage> {
                         backgroundColor: const Color(0xFF95A889),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+                            borderRadius: BorderRadius.circular(16)),
                         elevation: 0,
                       ),
                       onPressed: () async {
                         if (controller.text.trim().isEmpty) return;
-
-                        final double? hours = double.tryParse(controller.text.trim());
+                        final double? hours =
+                            double.tryParse(controller.text.trim());
                         if (hours == null || hours <= 0 || hours > 24) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Please enter a valid number between 1–24'),
+                              content: Text(
+                                  'Please enter a valid number between 1–24'),
                               backgroundColor: Colors.red,
                             ),
                           );
                           return;
                         }
-
-                        Navigator.pop(context); // close dialog first
-                        await saveTodaySleep(hours); // then save + update graph
+                        await saveTodaySleep(hours);
+                        if (mounted) Navigator.pop(context);
                       },
-                      child: const Text(
-                        "Save",
-                        style: TextStyle(color: Color(0xFF3A4336), fontWeight: FontWeight.bold),
+                      child: Text(
+                        isEditing ? "Update" : "Save",
+                        style: const TextStyle(
+                            color: Color(0xFF3A4336),
+                            fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
@@ -254,7 +279,8 @@ class _SleepPageState extends State<SleepPage> {
     DateTime now = DateTime.now();
     List<double> weekly = [];
     for (int i = 6; i >= 0; i--) {
-      String date = DateFormat('yyyy-MM-dd').format(now.subtract(Duration(days: i)));
+      String date =
+          DateFormat('yyyy-MM-dd').format(now.subtract(Duration(days: i)));
       var doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -266,11 +292,177 @@ class _SleepPageState extends State<SleepPage> {
     return weekly;
   }
 
-  Widget buildLineGraph() {
+  // ── SLEEP CARD: shows logged value or log prompt ──────────────────────────
+  Widget _sleepStatusCard() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: Color(0xFF95B289)));
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEDEFD3),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: const Color(0xFF95B289), width: 1.5),
+        ),
+        child: const Center(
+          child: CircularProgressIndicator(color: Color(0xFF95B289)),
+        ),
+      );
     }
 
+    // ── Already logged today ──────────────────────────────────────────────
+    if (_todaySleep != null) {
+      final display = _todaySleep! % 1 == 0
+          ? '${_todaySleep!.toInt()}'
+          : '$_todaySleep';
+
+      final emoji = _todaySleep! < 5
+          ? '😪'
+          : _todaySleep! < 7
+              ? '🌙'
+              : _todaySleep! <= 9
+                  ? '😌'
+                  : '💤';
+
+      final message = _todaySleep! < 5
+          ? 'You need more rest tonight 💙'
+          : _todaySleep! < 7
+              ? 'A bit low — aim for 7–9 hours'
+              : _todaySleep! <= 9
+                  ? 'Great sleep! Your body thanks you 🌿'
+                  : 'Quite a lot — are you feeling okay?';
+
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: const Color(0xFF95B289).withOpacity(0.12),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+              color: const Color(0xFF95B289).withOpacity(0.4), width: 1.5),
+        ),
+        child: Column(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 25)),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  display,
+                  style: const TextStyle(
+                    fontSize: 35,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF3A4336),
+                    fontFamily: 'Outfit',
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Padding(
+                  padding: EdgeInsets.only(top: 16),
+                  child: Text(
+                    'hrs',
+                    style: TextStyle(
+                      fontSize: 20,
+                      color: Color(0xFF95B289),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Colors.black54,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 18),
+            // Edit button — smaller, secondary style
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFF95B289)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              ),
+              icon: const Icon(Icons.edit_outlined,
+                  size: 16, color: Color(0xFF5D6D57)),
+              label: const Text(
+                'Edit',
+                style: TextStyle(
+                    color: Color(0xFF5D6D57),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500),
+              ),
+              onPressed: () => _showSleepDialog(isEditing: true),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ── Not logged yet today ──────────────────────────────────────────────
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEDEFD3),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFF95B289), width: 1.5),
+      ),
+      child: Column(
+        children: [
+          const Text('😴', style: TextStyle(fontSize: 48)),
+          const SizedBox(height: 10),
+          const Text(
+            "Not logged yet",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF3A4336),
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            "Tap below to log how many hours\nyou slept last night",
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, color: Colors.black45, height: 1.4),
+          ),
+          const SizedBox(height: 18),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF95B289),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+              elevation: 0,
+            ),
+            icon: const Icon(Icons.bedtime_outlined,
+                size: 18, color: Color(0xFF3A4336)),
+            label: const Text(
+              'Log Sleep',
+              style: TextStyle(
+                  color: Color(0xFF3A4336), fontWeight: FontWeight.bold),
+            ),
+            onPressed: () => _showSleepDialog(isEditing: false),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget buildLineGraph() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFF95B289)),
+      );
+    }
     return LineChart(
       LineChartData(
         minY: 0,
@@ -283,7 +475,8 @@ class _SleepPageState extends State<SleepPage> {
         ),
         titlesData: FlTitlesData(
           leftTitles: AxisTitles(
-            sideTitles: SideTitles(showTitles: true, interval: 2, reservedSize: 30),
+            sideTitles: SideTitles(
+                showTitles: true, interval: 2, reservedSize: 30),
           ),
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
@@ -291,12 +484,15 @@ class _SleepPageState extends State<SleepPage> {
               getTitlesWidget: (value, meta) {
                 const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
                 if (value.toInt() >= days.length) return const Text('');
-                return Text(days[value.toInt()], style: const TextStyle(fontSize: 12));
+                return Text(days[value.toInt()],
+                    style: const TextStyle(fontSize: 12));
               },
             ),
           ),
-          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
         borderData: FlBorderData(show: false),
         extraLinesData: ExtraLinesData(
@@ -306,19 +502,38 @@ class _SleepPageState extends State<SleepPage> {
               color: const Color(0xFF95B289),
               strokeWidth: 1.5,
               dashArray: [6, 4],
+              label: HorizontalLineLabel(
+                show: true,
+                alignment: Alignment.topRight,
+                style: const TextStyle(
+                    fontSize: 9, color: Color(0xFF95B289)),
+                labelResolver: (_) => 'Goal',
+              ),
             ),
           ],
         ),
         lineBarsData: [
           LineChartBarData(
-            spots: List.generate(_weeklyData.length, (i) => FlSpot(i.toDouble(), _weeklyData[i])),
+            spots: List.generate(
+              _weeklyData.length,
+              (i) => FlSpot(i.toDouble(), _weeklyData[i]),
+            ),
             isCurved: true,
             color: const Color(0xFF95B289),
             barWidth: 4,
-            dotData: FlDotData(show: true),
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, percent, bar, index) =>
+                  FlDotCirclePainter(
+                radius: 4,
+                color: Colors.white,
+                strokeWidth: 2,
+                strokeColor: const Color(0xFF95B289),
+              ),
+            ),
             belowBarData: BarAreaData(
               show: true,
-              color: const Color(0xFF95B289).withOpacity(0.25),
+              color: const Color(0xFF95B289).withOpacity(0.15),
             ),
           ),
         ],
@@ -326,7 +541,7 @@ class _SleepPageState extends State<SleepPage> {
     );
   }
 
-  Widget buildGraphContainer() {
+  Widget _graphCard() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -335,15 +550,24 @@ class _SleepPageState extends State<SleepPage> {
         borderRadius: BorderRadius.circular(28),
         border: Border.all(color: const Color(0xFF95B289), width: 1.5),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Weekly Sleep",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF3A4336))),
-          const SizedBox(height: 6),
+          const Text(
+            "Weekly Sleep",
+            style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF3A4336)),
+          ),
+          const SizedBox(height: 4),
           const Text("Last 7 days overview",
               style: TextStyle(fontSize: 12, color: Colors.black54)),
           const SizedBox(height: 20),
@@ -360,33 +584,37 @@ class _SleepPageState extends State<SleepPage> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text(getGreeting(), style: const TextStyle(color: Color(0xFF3A4336))),
+        title: Text(
+          getGreeting(),
+          style: const TextStyle(color: Color(0xFF3A4336)),
+        ),
         iconTheme: const IconThemeData(color: Color(0xFF3A4336)),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         child: Column(
           children: [
+            // Hero image
             Container(
-              height: 180,
+              height: 160,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(30),
+                borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: const Color(0xFF95B289)),
-                image: DecorationImage(image: AssetImage(getImage()), fit: BoxFit.cover),
+                image: DecorationImage(
+                  image: AssetImage(getImage()),
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
             const SizedBox(height: 20),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF95B289),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
-              ),
-              onPressed: showSleepDialog,
-              child: const Text("Log Sleep", style: TextStyle(color: Color(0xFF3A4336))),
-            ),
+
+            // Sleep status card — shows value or log prompt
+            _sleepStatusCard(),
+
             const SizedBox(height: 20),
-            buildGraphContainer(),
+
+            // Weekly graph
+            _graphCard(),
           ],
         ),
       ),
