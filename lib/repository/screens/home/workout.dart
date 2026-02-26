@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:zyra_final/domain/constant/appcolors.dart';
 import 'package:zyra_final/domain/services/recommendation_services.dart';
-import 'package:zyra_final/repository/screens/workout/workout_detail.dart';
+import 'package:zyra_final/repository/screens/home/workout_active_screen.dart';
 
 class WorkoutScreen extends StatefulWidget {
   const WorkoutScreen({super.key});
@@ -14,36 +15,23 @@ class WorkoutScreen extends StatefulWidget {
 }
 
 class _WorkoutScreenState extends State<WorkoutScreen> {
-  // ── STATE VARIABLES — all come from Firestore ─────────────────────────────
   bool isLoading = true;
-
-  // From users/{uid}/periodDates
   int cycleDay = 1;
   String phase = 'Follicular';
-
-  // From users/{uid}/dailyWellness/{today}
   int wellnessScore = 60;
   String mood = 'Neutral';
   List<String> symptoms = [];
   double sleepHours = 7;
   int waterGlasses = 0;
-
-  // From users/{uid}/workoutStreak + workoutLevel
   int streak = 0;
-  String streakLevel = 'Beginner'; // earned from consistency
-
-  // Derived from above
-  String level = 'Beginner'; // today's actual level (streak vs wellness)
+  String streakLevel = 'Beginner';
+  String level = 'Beginner';
   String intensity = 'Medium';
   bool isRestDay = false;
   String phaseMessage = '';
-
-  // Streak change popup data
   bool _levelChanged = false;
   String _levelChangeMessage = '';
   bool _levelUpgraded = false;
-
-  // Exercises from CSV
   List<Map<String, dynamic>> exercises = [];
 
   @override
@@ -52,34 +40,25 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     _loadData();
   }
 
-  // ── LOAD ALL DATA FROM FIRESTORE ──────────────────────────────────────────
   Future<void> _loadData() async {
     setState(() => isLoading = true);
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      // ── 1. Fetch user profile doc ────────────────────────────────────────
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .get();
       final userData = userDoc.data() ?? {};
-      // ── USER BASE LEVEL FROM FIRESTORE ─────────────────
       final baseLevel = userData['baseWorkoutLevel'] as String? ?? 'Beginner';
       streak = (userData['workoutStreak'] as num?)?.toInt() ?? 0;
       streakLevel = userData['workoutLevel'] as String? ?? baseLevel;
-
-      // ── 2. Read cycleDay + phase directly from Firestore ─────────────────
-      // homescreen.dart saves these every time periodDates are fetched
-      // so we never have to recalculate from the raw array
       cycleDay = (userData['cycleDay'] as num?)?.toInt() ?? 14;
       final rawPhase =
           userData['currentPhase'] as String? ?? 'Follicular Phase';
-      // currentPhase in DB is "Follicular Phase" — strip " Phase" for internal use
-      phase = _stripPhase(rawPhase);
+      phase = rawPhase.replaceAll(' Phase', '').trim();
 
-      // ── 3. Fetch today's wellness data ────────────────────────────────────
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
       final wellnessDoc = await FirebaseFirestore.instance
           .collection('users')
@@ -95,7 +74,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       symptoms = List<String>.from(w['symptoms'] ?? []);
       mood = _moodFromScore(moodScore);
 
-      // ── 4. Calculate wellness score ───────────────────────────────────────
       wellnessScore = _calcWellnessScore(
         sleepHours,
         waterGlasses,
@@ -103,39 +81,32 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         symptoms,
       );
 
-      // ── 5. Update streak and get earned level ─────────────────────────────
       final streakResult = await RecommendationService.updateStreak();
-
       streak = streakResult['streak'] ?? streak;
       String updatedLevel = streakResult['level'] ?? streakLevel;
-
-      // ── NEVER GO BELOW USER BASE LEVEL ─────────────────
       streakLevel = _maxLevel(baseLevel, updatedLevel);
-
       _levelChanged = streakResult['changed'] ?? false;
       _levelChangeMessage = streakResult['message'] ?? '';
       _levelUpgraded = streakResult['upgraded'] ?? false;
 
-      // ── 6. Derive today's actual level ────────────────────────────────────
-      // Streak earns the level — but wellness can reduce it temporarily
       final wellnessLevel = _getWellnessLevel(wellnessScore, symptoms);
       level = _mergeLevel(streakLevel, wellnessLevel);
-
-      // ── 7. Calculate intensity ────────────────────────────────────────────
       intensity = _getIntensity(mood, phase);
+      isRestDay =
+          wellnessScore < 30 ||
+          sleepHours < 4 ||
+          RecommendationService.isRestDayRecommended(sleepHours, symptoms);
 
-      // ── 8. Check rest day ────────────────────────────────────────────────
-      isRestDay = wellnessScore < 30 || sleepHours < 4;
-
-      // ── 9. Load exercises from CSV ────────────────────────────────────────
       if (!isRestDay) {
         final allWorkouts = await RecommendationService.loadWorkouts();
         exercises = RecommendationService.filterWorkouts(
           allWorkouts: allWorkouts,
           phase: phase,
           level: level,
-          intensity: intensity,
-          dayOfCycle: cycleDay,
+          mood: mood,
+          symptoms: symptoms,
+          sleepHours: sleepHours,
+          waterGlasses: waterGlasses,
         );
       }
 
@@ -145,40 +116,23 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     } finally {
       if (mounted) {
         setState(() => isLoading = false);
-        // Show popup after build if level changed
         if (_levelChanged) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _showLevelChangePopup();
-          });
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _showLevelChangePopup(),
+          );
         }
       }
     }
   }
 
   // ── HELPERS ───────────────────────────────────────────────────────────────
-
   String _maxLevel(String base, String current) {
-  const rank = {'Beginner': 0, 'Intermediate': 1, 'Advanced': 2};
-
-  final b = rank[base] ?? 0;
-  final c = rank[current] ?? 0;
-
-  return ['Beginner', 'Intermediate', 'Advanced'][c < b ? b : c];
-}
-
-  String _getPhase(int day) {
-    if (day <= 5) return 'Menstrual';
-    if (day <= 13) return 'Follicular';
-    if (day <= 16) return 'Ovulatory';
-    return 'Luteal';
+    const rank = {'Beginner': 0, 'Intermediate': 1, 'Advanced': 2};
+    final b = rank[base] ?? 0;
+    final c = rank[current] ?? 0;
+    return ['Beginner', 'Intermediate', 'Advanced'][c < b ? b : c];
   }
 
-  // "Follicular Phase" → "Follicular"
-  String _stripPhase(String raw) {
-    return raw.replaceAll(' Phase', '').trim();
-  }
-
-  // Level based purely on wellness/symptoms — temporary daily adjustment
   String _getWellnessLevel(int score, List<String> syms) {
     final heavy = syms.where((s) => s.toLowerCase() != 'none').length;
     if (score < 35 || heavy >= 3) return 'Beginner';
@@ -186,7 +140,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     return 'Advanced';
   }
 
-  // Streak earns level — wellness can only reduce it, never increase beyond earned
   String _mergeLevel(String earned, String wellness) {
     const rank = {'Beginner': 0, 'Intermediate': 1, 'Advanced': 2};
     final e = rank[earned] ?? 0;
@@ -322,7 +275,39 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     return map[muscle] ?? '💚';
   }
 
-  // ── STREAK LEVEL CHANGE POPUP ─────────────────────────────────────────────
+  Color _levelBadgeColor(String lv) {
+    switch (lv) {
+      case 'Advanced':
+        return const Color(0xFFE57373);
+      case 'Intermediate':
+        return const Color(0xFFFFB74D);
+      default:
+        return const Color(0xFF95B289);
+    }
+  }
+
+  String _levelEmoji(String lv) {
+    switch (lv) {
+      case 'Advanced':
+        return '🏆';
+      case 'Intermediate':
+        return '⭐';
+      default:
+        return '🌱';
+    }
+  }
+
+  // ── EXERCISE DETAIL POPUP ─────────────────────────────────────────────────
+  void _showExerciseDetail(Map<String, dynamic> exercise) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ExerciseDetailSheet(exercise: exercise),
+    );
+  }
+
+  // ── LEVEL CHANGE POPUP ────────────────────────────────────────────────────
   void _showLevelChangePopup() {
     showDialog(
       context: context,
@@ -364,7 +349,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              // Streak count display
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -448,7 +432,12 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                               const SizedBox(height: 20),
                               if (isRestDay) _restDayCard(),
                               if (!isRestDay) ...[
-                                _sectionTitle("Today's Workout"),
+                                // ── START WORKOUT BUTTON ─────────────────
+                                _startWorkoutButton(),
+                                const SizedBox(height: 20),
+                                _sectionTitle(
+                                  "Today's Workout  •  ${exercises.length} exercises",
+                                ),
                                 const SizedBox(height: 12),
                                 ...exercises.map((e) => _exerciseCard(e)),
                               ],
@@ -504,9 +493,97 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     );
   }
 
+  // ── START WORKOUT BUTTON ──────────────────────────────────────────────────
+  Widget _startWorkoutButton() {
+    final totalDuration = exercises.fold<int>(
+      0,
+      (sum, e) => sum + (int.tryParse(e['Duration']?.toString() ?? '30') ?? 30),
+    );
+    final totalMin = (totalDuration / 60).ceil();
+
+    return GestureDetector(
+      onTap: () {
+        if (exercises.isEmpty) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                WorkoutActiveScreen(exercises: exercises, phase: phase),
+          ),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF95B289), Color(0xFF5D8A6F)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF95B289).withOpacity(0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            const Text(
+              '▶',
+              style: TextStyle(fontSize: 32, color: Colors.white),
+            ),
+            const SizedBox(width: 16),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Start Workout',
+                  style: TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  '${exercises.length} exercises  ·  ~$totalMin min',
+                  style: TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 13,
+                    color: Colors.white.withOpacity(0.85),
+                  ),
+                ),
+              ],
+            ),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                level,
+                style: const TextStyle(
+                  fontFamily: 'Outfit',
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ── STREAK BANNER ─────────────────────────────────────────────────────────
   Widget _streakBanner() {
-    // Progress toward next level
     final streakProgress = (streak % 14) / 14;
     final nextLevel = streakLevel == 'Advanced'
         ? 'Max Level!'
@@ -525,7 +602,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         children: [
           Row(
             children: [
-              // Flame streak count
               Row(
                 children: [
                   const Text('🔥', style: TextStyle(fontSize: 22)),
@@ -551,7 +627,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                 ],
               ),
               const Spacer(),
-              // Current earned level badge
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -586,7 +661,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             ],
           ),
           const SizedBox(height: 10),
-          // Progress to next level
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
@@ -622,28 +696,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         ],
       ),
     );
-  }
-
-  Color _levelBadgeColor(String lv) {
-    switch (lv) {
-      case 'Advanced':
-        return const Color(0xFFE57373);
-      case 'Intermediate':
-        return const Color(0xFFFFB74D);
-      default:
-        return const Color(0xFF95B289);
-    }
-  }
-
-  String _levelEmoji(String lv) {
-    switch (lv) {
-      case 'Advanced':
-        return '🏆';
-      case 'Intermediate':
-        return '⭐';
-      default:
-        return '🌱';
-    }
   }
 
   // ── PHASE CARD ────────────────────────────────────────────────────────────
@@ -713,7 +765,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          // Today's level note (may differ from streak level if low wellness)
           if (level != streakLevel)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -733,7 +784,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               ),
             ),
           const SizedBox(height: 10),
-          // Stats row
           Row(
             children: [
               _badge('Wellness', '$wellnessScore/100'),
@@ -791,21 +841,17 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     );
   }
 
-  // ── EXERCISE CARD ─────────────────────────────────────────────────────────
+  // ── EXERCISE CARD — tapping opens detail popup ────────────────────────────
   Widget _exerciseCard(Map<String, dynamic> exercise) {
     final name = exercise['exerciseName']?.toString() ?? '';
     final sets = exercise['sets']?.toString() ?? '3';
     final duration = exercise['Duration']?.toString() ?? '30';
     final muscle = exercise['muscleGroup']?.toString() ?? '';
-    final intensity = exercise['intensity']?.toString() ?? 'Low';
+    final exIntensity = exercise['intensity']?.toString() ?? 'Low';
+    final index = exercises.indexOf(exercise) + 1;
 
     return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => WorkoutDetailScreen(exercise: exercise),
-        ),
-      ),
+      onTap: () => _showExerciseDetail(exercise),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
@@ -823,21 +869,43 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         ),
         child: Row(
           children: [
+            // Index circle
             Container(
-              width: 50,
-              height: 50,
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
                 color: const Color(0xFF95B289).withOpacity(0.15),
                 shape: BoxShape.circle,
               ),
               child: Center(
                 child: Text(
-                  _muscleEmoji(muscle),
-                  style: const TextStyle(fontSize: 22),
+                  '$index',
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: Color(0xFF5D6D57),
+                  ),
                 ),
               ),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 8),
+            // Muscle emoji
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: const Color(0xFF95B289).withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Text(
+                  _muscleEmoji(muscle),
+                  style: const TextStyle(fontSize: 20),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -851,7 +919,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                       color: Color(0xFF3A4336),
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 3),
                   Text(
                     '$sets sets · ${duration}s · $muscle',
                     style: const TextStyle(
@@ -866,24 +934,24 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: _intensityColor(intensity).withOpacity(0.15),
+                color: _intensityColor(exIntensity).withOpacity(0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                intensity,
+                exIntensity,
                 style: TextStyle(
                   fontFamily: 'Outfit',
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
-                  color: _intensityColor(intensity),
+                  color: _intensityColor(exIntensity),
                 ),
               ),
             ),
             const SizedBox(width: 8),
             const Icon(
-              Icons.play_circle_outline_rounded,
+              Icons.info_outline_rounded,
               color: Color(0xFF95B289),
-              size: 28,
+              size: 22,
             ),
           ],
         ),
@@ -917,10 +985,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            sleepHours < 4
-                ? 'You slept less than 4 hours. Rest is the best workout today.'
-                : 'Your wellness score is low. Give your body time to recover.',
+            RecommendationService.getSleepMessage(sleepHours),
             textAlign: TextAlign.center,
+
             style: const TextStyle(
               fontFamily: 'Outfit',
               fontSize: 14,
@@ -980,6 +1047,365 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── EXERCISE DETAIL BOTTOM SHEET ──────────────────────────────────────────────
+class _ExerciseDetailSheet extends StatefulWidget {
+  final Map<String, dynamic> exercise;
+  const _ExerciseDetailSheet({required this.exercise});
+
+  @override
+  State<_ExerciseDetailSheet> createState() => _ExerciseDetailSheetState();
+}
+
+class _ExerciseDetailSheetState extends State<_ExerciseDetailSheet> {
+  int _tab = 0; // 0 = Animation, 1 = Video
+
+  String _muscleEmoji(String muscle) {
+    const map = {
+      'Mobility': '🧘',
+      'Flexibility': '🤸',
+      'Hips': '🦋',
+      'Glutes': '🍑',
+      'Core': '⚡',
+      'Abs': '💪',
+      'Legs': '🦵',
+      'Spine': '🌊',
+      'Relaxation': '🌙',
+      'Lower Back': '🔄',
+      'Chest': '🎯',
+      'Back': '🏋️',
+      'Calves': '⚙️',
+      'Cardio': '🏃',
+      'Shoulders': '🌟',
+      'Full Body': '🔥',
+    };
+    return map[muscle] ?? '💚';
+  }
+
+  // Use the real YouTube link from CSV, fall back to search if missing
+  String _youtubeUrl(String name) {
+    final link = widget.exercise['youtubeLink']?.toString().trim() ?? '';
+    if (link.isNotEmpty) return link;
+    final query = Uri.encodeComponent('$name exercise how to do');
+    return 'https://www.youtube.com/results?search_query=$query';
+  }
+
+  Future<void> _openYoutube(String name) async {
+    final uri = Uri.parse(_youtubeUrl(name));
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final e = widget.exercise;
+    final name = e['exerciseName']?.toString() ?? '';
+    final duration = e['Duration']?.toString() ?? '30';
+    final muscle = e['muscleGroup']?.toString() ?? '';
+    final description = e['description']?.toString() ?? '';
+    final tips = e['tips']?.toString() ?? '';
+    final emoji = _muscleEmoji(muscle);
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag handle
+          Container(
+            margin: const EdgeInsets.only(top: 10, bottom: 4),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+
+          // ── TAB BAR ───────────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            child: Row(
+              children: [
+                _tabButton('Animation', 0),
+                const SizedBox(width: 24),
+                _tabButton('Video', 1),
+              ],
+            ),
+          ),
+
+          // ── TAB CONTENT ───────────────────────────────────────────────────
+          if (_tab == 0) _animationTab(emoji, muscle),
+          if (_tab == 1) _videoTab(name),
+
+          // ── EXERCISE INFO ─────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name.toUpperCase(),
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Text(
+                      'Duration',
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 14,
+                        color: Colors.black54,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '$duration s',
+                      style: const TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                if (description.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    description,
+                    style: const TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 14,
+                      color: Colors.black54,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+                if (tips.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    tips,
+                    style: const TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 14,
+                      color: Colors.black45,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          // ── CLOSE BUTTON ──────────────────────────────────────────────────
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              16,
+              20,
+              MediaQuery.of(context).padding.bottom + 16,
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF95B289),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  'CLOSE',
+                  style: TextStyle(
+                    fontFamily: 'Outfit',
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Colors.white,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tabButton(String label, int index) {
+    final selected = _tab == index;
+    return GestureDetector(
+      onTap: () => setState(() => _tab = index),
+      child: Column(
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontFamily: 'Outfit',
+              fontSize: 16,
+              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+              color: selected ? Colors.black : Colors.black38,
+            ),
+          ),
+          const SizedBox(height: 4),
+          if (selected)
+            Container(
+              height: 3,
+              width: 40,
+              decoration: BoxDecoration(
+                color: const Color(0xFF95B289),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // Animation tab — large emoji display with muscle info
+  Widget _animationTab(String emoji, String muscle) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      height: 220,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F5F5),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 80)),
+          const SizedBox(height: 8),
+          Text(
+            muscle,
+            style: const TextStyle(
+              fontFamily: 'Outfit',
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF5D6D57),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Video tab — YouTube thumbnail with open button
+  Widget _videoTab(String name) {
+    return GestureDetector(
+      onTap: () => _openYoutube(name),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 20),
+        height: 220,
+        decoration: BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Dark background
+            ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                color: const Color(0xFF1A1A2E),
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        '▶',
+                        style: TextStyle(fontSize: 48, color: Colors.white),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'HOW TO DO',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.7),
+                          fontSize: 12,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        name.toUpperCase(),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            // YouTube badge
+            Positioned(
+              bottom: 12,
+              right: 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF0000),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.play_arrow, color: Colors.white, size: 14),
+                    SizedBox(width: 4),
+                    Text(
+                      'YouTube',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Tap to open hint
+            Positioned(
+              top: 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black45,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Tap to open YouTube',
+                  style: TextStyle(color: Colors.white70, fontSize: 11),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
