@@ -6,10 +6,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:zyra_final/domain/constant/appcolors.dart';
 import 'package:zyra_final/domain/services/recommendation_services.dart';
 import 'package:zyra_final/repository/screens/home/workout_active_screen.dart';
-<<<<<<< HEAD
-=======
+
 import 'package:zyra_final/repository/screens/workout/muscle_body_diagram.dart';
->>>>>>> 714e1dc (workout and diet done)
+
 
 class WorkoutScreen extends StatefulWidget {
   const WorkoutScreen({super.key});
@@ -268,7 +267,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     }
   }
 
-<<<<<<< HEAD
+
   Color _levelBadgeColor(String lv) {
     switch (lv) {
       case 'Advanced':
@@ -280,8 +279,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     }
   }
 
-=======
->>>>>>> 714e1dc (workout and diet done)
+
   String _levelEmoji(String lv) {
     switch (lv) {
       case 'Advanced':
@@ -293,8 +291,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     }
   }
 
-<<<<<<< HEAD
-=======
 
   // ── MUSCLE ASSET HELPER ───────────────────────────────────────────────────
   String _muscleAsset(String muscleGroup) {
@@ -318,7 +314,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     };
     return map[muscleGroup] ?? 'fullbody';
   }
->>>>>>> 714e1dc (workout and diet done)
+
   // ── EXERCISE DETAIL POPUP ─────────────────────────────────────────────────
   void _showExerciseDetail(Map<String, dynamic> exercise) {
     showModalBottomSheet(
@@ -454,10 +450,9 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                               const SizedBox(height: 20),
                               if (isRestDay) _restDayCard(),
                               if (!isRestDay) ...[
-<<<<<<< HEAD
+
                                 // ── START WORKOUT BUTTON ─────────────────
-=======
->>>>>>> 714e1dc (workout and diet done)
+
                                 _startWorkoutButton(),
                                 const SizedBox(height: 20),
                                 _sectionTitle(
@@ -915,16 +910,11 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
               ),
             ),
             const SizedBox(width: 8),
-<<<<<<< HEAD
-            // Muscle emoji
-=======
-            // Mini muscle image thumbnail
->>>>>>> 714e1dc (workout and diet done)
+
             Container(
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-<<<<<<< HEAD
                 color: const Color(0xFF95B289).withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
@@ -932,7 +922,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                 child: Text(
                   _muscleEmoji(muscle),
                   style: const TextStyle(fontSize: 20),
-=======
                 color: const Color(0xFF95B289).withOpacity(0.08),
                 shape: BoxShape.circle,
               ),
@@ -948,7 +937,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                       color: Color(0xFF95B289),
                     ),
                   ),
->>>>>>> 714e1dc (workout and diet done)
                 ),
               ),
             ),
@@ -1099,10 +1087,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   }
 }
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 714e1dc (workout and diet done)
 // ── EXERCISE DETAIL BOTTOM SHEET ──────────────────────────────────────────────
 class _ExerciseDetailSheet extends StatefulWidget {
   final Map<String, dynamic> exercise;
@@ -1113,7 +1097,6 @@ class _ExerciseDetailSheet extends StatefulWidget {
 }
 
 class _ExerciseDetailSheetState extends State<_ExerciseDetailSheet> {
-<<<<<<< HEAD
   int _tab = 0; // 0 = Animation, 1 = Video
 
   String _muscleEmoji(String muscle) {
@@ -1138,13 +1121,9 @@ class _ExerciseDetailSheetState extends State<_ExerciseDetailSheet> {
     return map[muscle] ?? '💚';
   }
 
-  // Use the real YouTube link from CSV, fall back to search if missing
-=======
+  
   int _tab = 0; // 0 = Body Diagram, 1 = Video
-
   Color _phaseHighlightColor() => const Color(0xFF95B289);
-
->>>>>>> 714e1dc (workout and diet done)
   String _youtubeUrl(String name) {
     final link = widget.exercise['youtubeLink']?.toString().trim() ?? '';
     if (link.isNotEmpty) return link;
@@ -1167,10 +1146,7 @@ class _ExerciseDetailSheetState extends State<_ExerciseDetailSheet> {
     final muscle = e['muscleGroup']?.toString() ?? '';
     final description = e['description']?.toString() ?? '';
     final tips = e['tips']?.toString() ?? '';
-<<<<<<< HEAD
     final emoji = _muscleEmoji(muscle);
-=======
->>>>>>> 714e1dc (workout and diet done)
 
     return Container(
       decoration: const BoxDecoration(
@@ -1196,11 +1172,10 @@ class _ExerciseDetailSheetState extends State<_ExerciseDetailSheet> {
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
             child: Row(
               children: [
-<<<<<<< HEAD
+
                 _tabButton('Animation', 0),
-=======
                 _tabButton('Muscles', 0),
->>>>>>> 714e1dc (workout and diet done)
+
                 const SizedBox(width: 24),
                 _tabButton('Video', 1),
               ],
@@ -1208,11 +1183,11 @@ class _ExerciseDetailSheetState extends State<_ExerciseDetailSheet> {
           ),
 
           // ── TAB CONTENT ───────────────────────────────────────────────────
-<<<<<<< HEAD
+
           if (_tab == 0) _animationTab(emoji, muscle),
-=======
+
           if (_tab == 0) _muscleTab(muscle),
->>>>>>> 714e1dc (workout and diet done)
+
           if (_tab == 1) _videoTab(name),
 
           // ── EXERCISE INFO ─────────────────────────────────────────────────
@@ -1346,18 +1321,18 @@ class _ExerciseDetailSheetState extends State<_ExerciseDetailSheet> {
     );
   }
 
-<<<<<<< HEAD
+
   // Animation tab — large emoji display with muscle info
   Widget _animationTab(String emoji, String muscle) {
-=======
+
   // ── MUSCLE TAB — body diagram replacing the old animation/emoji tab ────────
   Widget _muscleTab(String muscle) {
->>>>>>> 714e1dc (workout and diet done)
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       height: 220,
       decoration: BoxDecoration(
-<<<<<<< HEAD
+
         color: const Color(0xFFF5F5F5),
         borderRadius: BorderRadius.circular(20),
       ),
@@ -1376,7 +1351,7 @@ class _ExerciseDetailSheetState extends State<_ExerciseDetailSheet> {
             ),
           ),
         ],
-=======
+
         color: const Color(0xFFF8FAF5),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
@@ -1388,7 +1363,7 @@ class _ExerciseDetailSheetState extends State<_ExerciseDetailSheet> {
           muscleGroup: muscle,
           highlightColor: const Color(0xFF95B289),
         ),
->>>>>>> 714e1dc (workout and diet done)
+
       ),
     );
   }
@@ -1407,10 +1382,6 @@ class _ExerciseDetailSheetState extends State<_ExerciseDetailSheet> {
         child: Stack(
           alignment: Alignment.center,
           children: [
-<<<<<<< HEAD
-            // Dark background
-=======
->>>>>>> 714e1dc (workout and diet done)
             ClipRRect(
               borderRadius: BorderRadius.circular(20),
               child: Container(
@@ -1447,10 +1418,7 @@ class _ExerciseDetailSheetState extends State<_ExerciseDetailSheet> {
                 ),
               ),
             ),
-<<<<<<< HEAD
-            // YouTube badge
-=======
->>>>>>> 714e1dc (workout and diet done)
+
             Positioned(
               bottom: 12,
               right: 12,
@@ -1480,10 +1448,7 @@ class _ExerciseDetailSheetState extends State<_ExerciseDetailSheet> {
                 ),
               ),
             ),
-<<<<<<< HEAD
-            // Tap to open hint
-=======
->>>>>>> 714e1dc (workout and diet done)
+
             Positioned(
               top: 12,
               child: Container(
@@ -1506,8 +1471,6 @@ class _ExerciseDetailSheetState extends State<_ExerciseDetailSheet> {
       ),
     );
   }
-<<<<<<< HEAD
+  }
 }
-=======
-}
->>>>>>> 714e1dc (workout and diet done)
+            
