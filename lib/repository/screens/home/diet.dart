@@ -54,7 +54,7 @@ class _DietScreenState extends State<DietScreen>
   }
 
   // ── LOAD ALL DATA ─────────────────────────────────────────────────────────
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool isRefresh = false}) async {
     setState(() => isLoading = true);
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -64,15 +64,11 @@ class _DietScreenState extends State<DietScreen>
       final profile = await DietService.fetchUserProfile();
       dietType = DietService.mapDietType(profile['dietPreference'] as String?);
 
-      // Load period dates → cycle day → phase
-      List<DateTime> periodDates = [];
-      if (profile.containsKey('periodDates')) {
-        periodDates = (profile['periodDates'] as List)
-            .map((t) => (t as Timestamp).toDate())
-            .toList();
-      }
-      cycleDay = DietService.calcCycleDay(periodDates);
-      phase = DietService.getPhase(cycleDay);
+      // Read phase and cycleDay directly from Firestore
+      cycleDay = (profile['cycleDay'] as num?)?.toInt() ?? 1;
+      final rawPhase = profile['currentPhase'] as String? ?? '';
+      phase = rawPhase.replaceAll(' Phase', '').trim();
+      if (phase.isEmpty) phase = DietService.getPhase(cycleDay);
 
       // Load today wellness
       final w = await DietService.fetchTodayWellness();
@@ -88,18 +84,26 @@ class _DietScreenState extends State<DietScreen>
         symptoms: symptoms,
       );
 
-      // Load CSV and pick meal
+      // Load CSV meals
       final allMeals = await DietService.loadMeals();
+
+      // Get or create today's meal seed
+      int? seed = await DietService.loadTodayMealSeed();
+      if (isRefresh || seed == null) {
+        seed = DateTime.now().millisecondsSinceEpoch % 100000;
+        await DietService.saveTodayMealSeed(seed);
+      }
+
+      // Pick meal using seed
       todayMeal = DietService.filterMeal(
         allMeals: allMeals,
         phase: phase,
         dietType: dietType,
         wellnessScore: wellnessScore,
+        forceSeed: seed,
       );
 
       symptomTips = DietService.getSymptomTips(symptoms);
-
-      // Fetch food images
       _fetchImages();
     } catch (e) {
       debugPrint('Diet load error: $e');
@@ -138,7 +142,7 @@ class _DietScreenState extends State<DietScreen>
     }
   }
 
-  // ── HELPERS ───────────────────────────────────────────────────────────────
+  //  HELPERS
   Color _phaseColor(String ph) {
     switch (ph) {
       case 'Menstrual':
@@ -320,7 +324,7 @@ class _DietScreenState extends State<DietScreen>
           ),
           const Spacer(),
           GestureDetector(
-            onTap: _loadData,
+            onTap: () => _loadData(isRefresh: true), // ← only this line changes
             child: const Icon(
               Icons.refresh_rounded,
               color: Color(0xFF95B289),
@@ -614,16 +618,16 @@ class _DietScreenState extends State<DietScreen>
         .where((s) => s.isNotEmpty)
         .toList();
 
-    // Identify iron-rich ingredients
-    bool hasIron(String s) => s.contains('(iron)');
-
     // Parse preparation into numbered steps
-    final rawPrep = meal['preparation'] ?? '';
+    final rawPrep = meal['preparation'] ?? ''; // ← this line was missing
     final steps = rawPrep
-        .split(RegExp(r'[,.]'))
+        .split(' | ')
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
         .toList();
+
+    // Identify iron-rich ingredients
+    bool hasIron(String s) => s.contains('(iron)');
 
     return Container(
       padding: const EdgeInsets.all(20),
