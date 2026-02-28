@@ -3,9 +3,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:zyra_final/repository/screens/home/analytics.dart';
-import 'package:zyra_final/repository/screens/home/diet.dart';
+import 'package:zyra_final/repository/screens/diet/diet.dart';
+import 'package:zyra_final/repository/screens/home/profilescreen.dart';
 import 'package:zyra_final/repository/screens/home/symptoms_daily.dart';
-import 'package:zyra_final/repository/screens/home/workout.dart';
+import 'package:zyra_final/repository/screens/workout/workout.dart';
 import 'package:zyra_final/repository/screens/meditation/meditation_home.dart';
 import 'package:zyra_final/repository/screens/periods/period_calendar.dart';
 import 'package:zyra_final/repository/screens/sleep/sleep_home.dart';
@@ -1051,42 +1052,21 @@ class _ZyraHomePageState extends State<ZyraHomePage> with WidgetsBindingObserver
     return Row(
       children: [
         GestureDetector(
-          onTap: () async {
-            bool? confirm = await showDialog<bool>(
-              context: context,
-              builder: (context) => AlertDialog(
-                backgroundColor: const Color.fromARGB(255, 237, 250, 209),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20)),
-                title: const Text("Logout",
-                    style: TextStyle(
-                        color: Color(0xFF3A4336),
-                        fontWeight: FontWeight.bold)),
-                content: const Text("Do you want to Logout?",
-                    style: TextStyle(color: Color(0xFF3A4336))),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text("Cancel")),
-                  TextButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text("Logout")),
-                ],
-              ),
-            );
-            if (confirm == true) await FirebaseAuth.instance.signOut();
-          },
-          child: Container(
-            height: 64,
-            width: 64,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              image: DecorationImage(
-                  image: AssetImage("assets/images/profile.png"),
-                  fit: BoxFit.cover),
-            ),
-          ),
-        ),
+  onTap: () {
+    Navigator.push(context,
+        MaterialPageRoute(builder: (_) => const ProfileScreen()));
+  },
+  child: Container(
+    height: 64,
+    width: 64,
+    decoration: const BoxDecoration(
+      shape: BoxShape.circle,
+      image: DecorationImage(
+          image: AssetImage("assets/images/profile.png"),
+          fit: BoxFit.cover),
+    ),
+  ),
+),
         const Spacer(),
         Column(
           children: [
